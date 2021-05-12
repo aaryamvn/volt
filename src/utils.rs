@@ -1,13 +1,61 @@
 use crate::classes::package::Package;
 
+use dirs::home_dir;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::{io, io::Write, process, u64};
+use rusqlite::Connection;
+use std::{env, io, io::Write, path::Path, process, u64};
+use tokio::sync::Mutex;
+
+pub struct App {
+    pub current_dir: Box<Path>,
+    pub home_dir: Box<Path>,
+    pub volt_dir: Box<Path>,
+    pub db: Mutex<Connection>,
+}
 
 #[allow(unused)]
-pub fn initialize() -> Vec<String> {
+pub fn initialize() -> (App, Vec<String>) {
     // Initialize And Get Args
     enable_ansi_support().unwrap();
-    std::env::args().collect()
+
+    let current_dir = env::current_dir().unwrap().into_boxed_path();
+    let home_dir = home_dir()
+        .map(|dir| dir.into_boxed_path())
+        .unwrap_or_else(|| current_dir.clone());
+    let volt_dir = home_dir.join(".volt").into_boxed_path();
+
+    // Configure cache database
+    let db = Connection::open(volt_dir.join("cache.db3")).unwrap();
+
+    // Create dependency table
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS deps (
+            id VARCHAR(256) PRIMARY KEY
+        )",
+        [],
+    )
+    .unwrap();
+
+    // Create M:M table between dependencies
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS dep_has_deps (
+            depender VARCHAR(256) NOT NULL,
+            dependant VARCHAR(256) NOT NULL,
+            FOREIGN KEY (depender) REFERENCES deps(id),
+            FOREIGN KEY (dependant) REFERENCES deps(id)
+        )",
+        [],
+    )
+    .unwrap();
+
+    let app = App {
+        current_dir,
+        home_dir,
+        volt_dir,
+        db: Mutex::new(db),
+    };
+
+    (app, std::env::args().collect())
 }
 
 #[allow(unused)]

@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::str::FromStr;
 
+use crate::utils::App;
+
 pub mod add;
 pub mod help;
 pub mod init;
@@ -54,5 +56,5 @@ impl AppCommand {
 pub trait Command {
     fn help(&self) -> String;
 
-    async fn exec(&self, args: &Vec<String>, flags: &Vec<String>);
+    async fn exec(&self, app: App, args: &Vec<String>, flags: &Vec<String>);
 }

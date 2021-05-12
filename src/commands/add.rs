@@ -1,8 +1,8 @@
-use crate::model::http_manager;
 use crate::{
     classes::package::{Package, Version},
     utils::download_tarbal,
 };
+use crate::{model::http_manager, utils::App};
 use async_trait::async_trait;
 use colored::Colorize;
 use sha1;
@@ -43,7 +43,7 @@ impl Command for Add {
         )
     }
 
-    async fn exec(&self, packages: &Vec<String>, _flags: &Vec<String>) {
+    async fn exec(&self, app: App, packages: &Vec<String>, _flags: &Vec<String>) {
         for package_name in packages {
             let response = match http_manager::get_package(package_name) {
                 Ok(text) => text,
@@ -59,6 +59,28 @@ impl Command for Add {
             };
 
             let package: Package = serde_json::from_str(&response).unwrap();
+
+            // Cache deps
+            {
+                let db = app.db.lock().await;
+                let mut query = db
+                    .prepare("INSERT OR IGNORE INTO deps(id) VALUES (?)")
+                    .unwrap();
+                for (name, version) in &package
+                    .versions
+                    .get(&package.dist_tags.latest)
+                    .unwrap()
+                    .dependencies
+                {
+                    query
+                        .execute([&format!(
+                            "{}_{}",
+                            name.replace("_", "-"),
+                            version.replace("^", "")
+                        )])
+                        .unwrap();
+                }
+            }
 
             // println!("package: {:?}", package);
 

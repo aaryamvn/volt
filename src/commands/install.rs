@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use colored::Colorize;
 
-use crate::__VERSION__;
+use crate::{utils::App, __VERSION__};
 
 use super::Command;
 
@@ -32,5 +32,5 @@ impl Command for Install {
         )
     }
 
-    async fn exec(&self, _packages: &Vec<String>, _flags: &Vec<String>) {}
+    async fn exec(&self, _app: App, _packages: &Vec<String>, _flags: &Vec<String>) {}
 }

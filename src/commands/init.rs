@@ -4,7 +4,7 @@ mod init_data;
 use crate::{
     commands::init::init_data::License,
     prompt::prompt::{Confirm, Input, Select},
-    utils::get_git_config,
+    utils::{get_git_config, App},
     __VERSION__,
 };
 
@@ -44,7 +44,7 @@ impl Command for Init {
         )
     }
 
-    async fn exec(&self, _args: &Vec<String>, flags: &Vec<String>) {
+    async fn exec(&self, _app: App, _args: &Vec<String>, flags: &Vec<String>) {
         let temp = env::current_dir().unwrap().to_string_lossy().to_string();
         let split: Vec<&str> = temp.split(r"\").collect::<Vec<&str>>();
         let cwd: String = split[split.len() - 1].to_string();
