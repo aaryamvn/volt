@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use colored::Colorize;
 
@@ -13,14 +15,14 @@ impl Command for Install {
         format!(
             r#"volt {}
         
-    Install dependencies for a project.
+Install dependencies for a project.
+
+Usage: {} {} {}
     
-    Usage: {} {} {}
-        
-    Options: 
-        
-      {} {} Accept all prompts while installing dependencies.  
-      {} {} Output verbose messages on internal operations."#,
+Options: 
+    
+  {} {} Accept all prompts while installing dependencies.  
+  {} {} Output verbose messages on internal operations."#,
             __VERSION__.bright_green().bold(),
             "volt".bright_green().bold(),
             "install".bright_purple(),
@@ -32,5 +34,5 @@ impl Command for Install {
         )
     }
 
-    async fn exec(&self, _app: App, _packages: &Vec<String>, _flags: &Vec<String>) {}
+    async fn exec(&self, _app: Arc<App>, _packages: &Vec<String>, _flags: &Vec<String>) {}
 }

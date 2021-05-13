@@ -3,7 +3,10 @@ mod classes;
 mod commands;
 mod model;
 mod prompt;
+mod traits;
 mod utils;
+
+use std::sync::Arc;
 
 // Imports
 use commands::AppCommand;
@@ -26,5 +29,5 @@ async fn main() {
         std::process::exit(0);
     }
 
-    cmd.exec(app, &args, &flags).await
+    cmd.exec(Arc::new(app), &args, &flags).await
 }

@@ -1,9 +1,14 @@
 use crate::classes::package::Package;
 
 use dirs::home_dir;
+use flate2::read::GzDecoder;
 use indicatif::{ProgressBar, ProgressStyle};
 use rusqlite::Connection;
-use std::{env, io, io::Write, path::Path, process, u64};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
+use std::{env, io, process, u64};
+use tar::Archive;
 use tokio::sync::Mutex;
 
 pub struct App {
@@ -58,7 +63,6 @@ pub fn initialize() -> (App, Vec<String>) {
     (app, std::env::args().collect())
 }
 
-#[allow(unused)]
 pub fn get_arguments(args: &Vec<String>) -> (Vec<String>, Vec<String>) {
     let mut flags: Vec<String> = vec![];
     let mut packages: Vec<String> = vec![];
@@ -76,19 +80,20 @@ pub fn get_arguments(args: &Vec<String>) -> (Vec<String>, Vec<String>) {
     (flags, packages)
 }
 
-/// downloads tarbal file from package
-pub async fn download_tarbal(package: Package) {
-    let latest_version = package.dist_tags.latest;
-    let name = package.name;
-    let tarball = &package.versions[&latest_version].dist.tarball;
-    println!("{:?}", tarball);
+/// downloads tarball file from package
+pub async fn download_tarball(package: &Package) -> String {
+    let latest_version = &package.dist_tags.latest;
+    let name = &package.name;
+    let tarball = &package.versions[latest_version].dist.tarball;
 
     let mut response = reqwest::get(tarball).await.unwrap();
     let total_length = response.content_length().unwrap();
     let progress_bar = ProgressBar::new(total_length);
-    progress_bar.set_style(ProgressStyle::default_bar()
-    .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-    .progress_chars("#>-"));
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .progress_chars("=>-"),
+    );
 
     let loc = format!(
         "{}\\.volt\\{}-{}.tgz",
@@ -96,10 +101,11 @@ pub async fn download_tarbal(package: Package) {
         name,
         latest_version
     );
-    println!("loc: {}", loc);
+
+    let path = Path::new(&loc);
 
     // Placeholder buffer
-    let mut file = std::fs::File::create(loc).unwrap();
+    let mut file = File::create(&path).unwrap();
 
     while let Some(chunk) = response.chunk().await.unwrap() {
         progress_bar.inc(chunk.len() as u64);
@@ -107,10 +113,34 @@ pub async fn download_tarbal(package: Package) {
     }
 
     progress_bar.finish();
+
+    loc
+}
+
+pub fn extract_tarball(file_path: &str, package: &Package) -> Result<(), std::io::Error> {
+    let path = Path::new(file_path);
+    let tar_gz = File::open(path)?;
+    let tar = GzDecoder::new(tar_gz);
+    let mut archive = Archive::new(tar);
+    archive.unpack("node_modules")?;
+    if !Path::new(&format!(r"node_modules\{}", package.name)).exists() {
+        std::fs::rename(
+            r"node_modules\package",
+            format!(r"node_modules\{}", package.name),
+        )?;
+    } else {
+        let loc = format!(r"node_modules\{}\package.json", package.name);
+        let file_contents = std::fs::read_to_string(loc).unwrap();
+        let json_file: serde_json::Value = serde_json::from_str(file_contents.as_str()).unwrap();
+        let version = json_file["version"].as_str().unwrap();
+        if version != package.dist_tags.latest {
+            // Update dependencies
+        }
+    }
+    Ok(())
 }
 
 /// Gets a config key from git using the git cli.
-#[allow(unused)]
 pub fn get_git_config(key: &str) -> io::Result<Option<String>> {
     process::Command::new("git")
         .arg("config")

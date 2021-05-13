@@ -11,9 +11,9 @@ use crate::{
 use async_trait::async_trait;
 use colored::Colorize;
 use init_data::InitData;
-use std::fs::File;
 use std::io::Write;
 use std::{env, process};
+use std::{fs::File, sync::Arc};
 
 use super::Command;
 
@@ -25,14 +25,14 @@ impl Command for Init {
         format!(
             r#"volt {}
     
-    Interactively create or update a package.json file for a project
+Interactively create or update a package.json file for a project
+
+Usage: {} {} {}
     
-    Usage: {} {} {}
-        
-    Options:
-        
-      {} {} Initialize a package.json file without any prompts.  
-      {} {} Output verbose messages on internal operations."#,
+Options:
+    
+  {} {} Initialize a package.json file without any prompts.  
+  {} {} Output verbose messages on internal operations."#,
             __VERSION__.bright_green().bold(),
             "volt".bright_green().bold(),
             "init".bright_purple(),
@@ -44,7 +44,7 @@ impl Command for Init {
         )
     }
 
-    async fn exec(&self, _app: App, _args: &Vec<String>, flags: &Vec<String>) {
+    async fn exec(&self, _app: Arc<App>, _args: &Vec<String>, flags: &Vec<String>) {
         let temp = env::current_dir().unwrap().to_string_lossy().to_string();
         let split: Vec<&str> = temp.split(r"\").collect::<Vec<&str>>();
         let cwd: String = split[split.len() - 1].to_string();

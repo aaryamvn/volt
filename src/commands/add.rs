@@ -1,12 +1,13 @@
-use crate::{
-    classes::package::{Package, Version},
-    utils::download_tarbal,
-};
-use crate::{model::http_manager, utils::App};
+use crate::model::http_manager;
+use crate::traits::UnwrapGraceful;
+use crate::utils::{download_tarball, extract_tarball};
+use crate::{classes::package::Version, utils::App};
 use async_trait::async_trait;
 use colored::Colorize;
-use sha1;
-use std::process;
+use sha1::{Digest, Sha1};
+use std::io;
+use std::{fs::File, sync::Arc};
+use tokio::{self, task::JoinHandle};
 
 use crate::__VERSION__;
 
@@ -20,15 +21,15 @@ impl Command for Add {
         format!(
             r#"volt {}
     
-    Add a package to your dependencies for your project.
+Add a package to your dependencies for your project.
+
+Usage: {} {} {} {}
+
+Options: 
     
-    Usage: {} {} {} {}
-    
-    Options: 
-        
-      {} {} Output the version number.
-      {} {} Output verbose messages on internal operations.
-      {} {} Disable progress bar."#,
+  {} {} Output the version number.
+  {} {} Output verbose messages on internal operations.
+  {} {} Disable progress bar."#,
             __VERSION__.bright_green().bold(),
             "volt".bright_green().bold(),
             "add".bright_purple(),
@@ -43,22 +44,18 @@ impl Command for Add {
         )
     }
 
-    async fn exec(&self, app: App, packages: &Vec<String>, _flags: &Vec<String>) {
+    async fn exec(&self, app: Arc<App>, packages: &Vec<String>, flags: &Vec<String>) {
         for package_name in packages {
-            let response = match http_manager::get_package(package_name) {
-                Ok(text) => text,
-                Err(e) => {
-                    eprintln!(
+            let package = http_manager::get_package(package_name)
+                .await
+                .unwrap_graceful(|err| {
+                    format!(
                         "{}: An Error Occured While Requesting {}.json - {}",
                         "error".bright_red().bold(),
                         package_name,
-                        e.to_string().bright_yellow()
-                    );
-                    process::exit(1);
-                }
-            };
-
-            let package: Package = serde_json::from_str(&response).unwrap();
+                        err.to_string().bright_yellow()
+                    )
+                });
 
             // Cache deps
             {
@@ -91,17 +88,43 @@ impl Command for Add {
                 .1
                 .clone();
 
-            // TODO: Handle Dependencies
-
-            // TODO: Download File
-            download_tarbal(package).await;
-
-            // TODO: Verify Checksum
-            let dl = sha1::Sha1::from("").digest(); // TODO: Change this to a real checksum
-
-            if dl.to_string() == version.dist.shasum {
-                // Verified Checksum
+            let mut handles: Vec<JoinHandle<()>> = Vec::with_capacity(version.dependencies.len());
+            for dependency in version.dependencies.iter() {
+                let app = app.clone();
+                let dependency = dependency.0.clone();
+                let flags = (*flags).clone();
+                let handle = tokio::spawn(async move {
+                    println!("Getting dep: {}", &dependency);
+                    Add.exec(app, &vec![dependency.clone()], &flags).await;
+                    println!("Done dep: {}", dependency);
+                });
+                handles.push(handle);
             }
+
+            handles.push(tokio::spawn(async move {
+                let path = download_tarball(&package).await;
+
+                match extract_tarball(path.as_str(), &package) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        eprintln!("{}", err);
+                    }
+                };
+
+                let mut file = File::open(path).unwrap();
+                let mut hasher = Sha1::new();
+                io::copy(&mut file, &mut hasher).unwrap();
+                let hash = format!("{:x}", hasher.finalize());
+
+                if hash == version.dist.shasum {
+                    // Verified Checksum
+                    println!("{}", "Successfully Verified Hash".bright_green());
+                } else {
+                    println!("Failed To Verify")
+                }
+            }));
+
+            futures::future::join_all(handles).await;
         }
     }
 }
